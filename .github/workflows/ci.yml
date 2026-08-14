@@ -38,13 +38,49 @@ jobs:
           python -m pip install -e . --no-deps
           python -m pip check
       - name: Append-only + frozen pins + fsck (Regime B — no replay)
+        env:
+          PR_BASE_REF: ${{ github.base_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSHED_REF: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          if [ -n "${{ github.base_ref }}" ]; then
-            git fetch origin "${{ github.base_ref }}"
-            bash ci/run_ledger_gate.sh "origin/${{ github.base_ref }}"
+          set -euo pipefail
+          # The diff base must be explicit for every trigger; the script's
+          # bare HEAD~1...HEAD fallback is blind below the tip of a
+          # multi-commit push and is never used from CI.
+          ZERO="0000000000000000000000000000000000000000"
+          if [ -n "$PR_BASE_REF" ]; then
+            git fetch origin "$PR_BASE_REF"
+            BASE="origin/$PR_BASE_REF"
+          elif [ "$EVENT_NAME" = "push" ] && [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "$ZERO" ]; then
+            # Previous remote tip: the range covers every commit in this push.
+            if ! git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+              echo "error: push base $PUSH_BEFORE not in fetched history" >&2
+              echo "  (forced update or truncated fetch?). Refusing to guess" >&2
+              echo "  an append-only range." >&2
+              exit 1
+            fi
+            BASE="$PUSH_BEFORE"
+          elif [ "$EVENT_NAME" = "push" ] && [ "$PUSHED_REF" != "$DEFAULT_BRANCH" ]; then
+            # New branch: three-dot against the default branch covers the
+            # whole branch from its merge base.
+            if ! git rev-parse --verify --quiet "origin/$DEFAULT_BRANCH" >/dev/null; then
+              echo "error: origin/$DEFAULT_BRANCH unavailable; cannot" >&2
+              echo "  establish an append-only base for new branch" >&2
+              echo "  $PUSHED_REF." >&2
+              exit 1
+            fi
+            BASE="origin/$DEFAULT_BRANCH"
           else
-            bash ci/run_ledger_gate.sh
+            # First-ever push of the default branch, or manual dispatch: no
+            # prior tip exists. The root commit covers all later commits;
+            # the root's own tree is additions-only by construction.
+            BASE="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+            echo "note: no prior tip; using root commit as base."
           fi
+          echo "append-only diff base: $BASE"
+          bash ci/run_ledger_gate.sh "$BASE"
 
   nre-fencepost:
     runs-on: ubuntu-latest

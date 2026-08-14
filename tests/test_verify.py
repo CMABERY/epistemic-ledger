@@ -121,6 +121,21 @@ def test_derived_without_cas_transform(ledger_repo: Path, tmp_path: Path) -> Non
     assert any("transform not in CAS" in e for e in r.errors)
 
 
+def test_tampered_transform_fails_all_layers(ledger_repo: Path, tmp_path: Path) -> None:
+    parent = _ingest_root(ledger_repo, tmp_path, b"root")
+    nid = _ingest_derived(ledger_repo, tmp_path, b"child", [parent], b"# t")
+    m = json.loads(node_manifest_path(ledger_repo, nid).read_text())
+    tdigest = m["transform"]["digest"]
+    # Overwrite the transform blob in place: same path, different bytes.
+    CasPaths.from_repo_root(ledger_repo).object_path(tdigest).write_bytes(b"# evil")
+
+    r = verify_node(ledger_repo, nid)
+    assert not r.ok
+    assert any("transform object corrupt" in e for e in r.errors)
+    assert not verify_reachable(ledger_repo, nid).ok
+    assert not fsck(ledger_repo).ok
+
+
 def test_diamond_dag_reachable(ledger_repo: Path, tmp_path: Path) -> None:
     a = _ingest_root(ledger_repo, tmp_path, b"A")
     b = _ingest_derived(ledger_repo, tmp_path, b"B", [a], b"# tb")

@@ -58,8 +58,9 @@ CI never executes transforms; it verifies structure only.
 ## Verification layers
 
 1. `ledger verify <id|ref>` — manifest exists, schema-valid, object hash
-   matches id, parent manifests exist, derived transform in CAS; retracted
-   nodes warn (fail with `--deny-retracted`); `--replay` recomputes.
+   matches id, parent manifests exist, derived transform in CAS and hashing
+   to its manifest digest; retracted nodes warn (fail with
+   `--deny-retracted`); `--replay` recomputes.
 2. `ledger verify-reachable [id|ref]` — the above over the transitive parent
    closure (default root: ref `main`); cycle-safe.
 3. `ledger fsck` — whole-store audit including valid-but-unreachable nodes:

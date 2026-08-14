@@ -2,6 +2,7 @@
 
 Ratified decisions governing this reconstruction. Ratification source for
 ADR-001…ADR-018: user approval of the reconstruction plan, 2026-08-13.
+ADR-019: user ratification in the v0.1.0 promotion session, 2026-08-13.
 Entries are append-only; supersede with a new entry, never edit history.
 
 Original design material: `github.com/CMABERY/4GARTHA` (frozen bytes) and the
@@ -28,3 +29,4 @@ tests/bytes are normative, narrative is not.**
 | ADR-016 | CI checks out with `fetch-depth: 0` and runs an explicit merge-base precheck that fails loudly with remediation text. | The original's `--depth=1` fetch silently broke the append-only diff range ("no merge base"). |
 | ADR-017 | Deferred from this pass: TPM root-entropy fixtures (`commit-fixtures/`, `ingest_root_entropy.py`), RCWP delta tooling, P1x/P2x/P3x canon extensions. Seams: ordinary root-node ingest; reserved `ledger/deltas/`. | User-ratified scope: kernel + governance + Sprint-1 gate. |
 | ADR-018 | Strays excluded from reconstruction: `memory_system.py`, `test_memory_system.py`, `0001-ingest-session-lock.patch`, `scripts/insert_fix_tools_imports.py`, `static.yml`/`static1.yml`/`setup-directories.yml`, `.github/agents/`, orphaned `tools/_schema.py`. | Unrelated to the three in-scope subsystems; several reference artifacts that do not exist. |
+| ADR-019 | Node identity is **artifact identity** for v0.1.0: id = sha256 of artifact bytes (ADR-003), one canonical provenance manifest per byte-identical artifact, replacement refused by atomic create (ADR-015). Alternate derivations producing identical bytes are not separately representable; the first pilot is restricted to workflows where that is acceptable. | The ledger records what an artifact *is* and one canonical account of where it came from — not independently identifiable derivation events. Derivation-event identity would be a foundational node-model change (new id scheme, new manifest layout), not an extension; if it is ever required, publication stops and the model is redesigned under a new decision. |

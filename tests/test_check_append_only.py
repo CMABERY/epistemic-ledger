@@ -7,6 +7,7 @@ merge-base/root-commit hardening.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -16,10 +17,23 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "tools" / "check_append_only.py"
 
+# Scratch repos must see stock git behavior, not the developer's global or
+# system config: commit signing would drag in an external agent (flaky and
+# signs throwaway commits with a real key), and diff/rename settings could
+# change the very `--name-status` output the script under test parses.
+GIT_ENV = {
+    **os.environ,
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_SYSTEM": os.devnull,
+}
+
 
 def _git(repo: Path, *args: str) -> str:
     return subprocess.check_output(
-        ["git", "-C", str(repo), *args], text=True, stderr=subprocess.STDOUT
+        ["git", "-C", str(repo), *args],
+        text=True,
+        stderr=subprocess.STDOUT,
+        env=GIT_ENV,
     )
 
 
@@ -46,6 +60,7 @@ def _run(repo: Path, *args: str) -> subprocess.CompletedProcess:
         cwd=repo,
         text=True,
         capture_output=True,
+        env=GIT_ENV,
     )
 
 
@@ -128,6 +143,20 @@ def test_base_ref_mode(tmp_path: Path) -> None:
     (repo / "ledger" / "nodes" / ("a" * 64 + ".json")).write_text("tampered\n")
     _commit_all(repo, "tamper on top")
     assert _run(repo, "base").returncode == 2
+
+
+def test_multi_commit_range_needs_explicit_base(tmp_path: Path) -> None:
+    """A violation buried below the tip commit is invisible to the bare
+    HEAD~1...HEAD fallback and caught only via an explicit base — the reason
+    CI must always pass one (push: previous tip; PR: origin/<base>)."""
+    repo = _init_repo(tmp_path)
+    _git(repo, "branch", "base")
+    (repo / "ledger" / "nodes" / ("a" * 64 + ".json")).write_text("tampered\n")
+    _commit_all(repo, "tamper mid-push")
+    (repo / "other" / "innocent.txt").write_text("later\n")
+    _commit_all(repo, "innocent tip")
+    assert _run(repo).returncode == 0, "fallback range is blind below the tip"
+    assert _run(repo, "base").returncode == 2, "explicit base must catch it"
 
 
 def test_cached_and_base_ref_conflict(tmp_path: Path) -> None:

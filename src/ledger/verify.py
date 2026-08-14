@@ -78,16 +78,26 @@ def verify_node(
         if not pm.exists():
             errors.append(f"missing parent manifest: {pm}")
 
-    # 5) derived nodes must have a replayable transform in the CAS (ADR-004)
+    # 5) derived nodes must have a replayable transform in the CAS (ADR-004),
+    # and its bytes must hash to the manifest digest — existence alone would
+    # let a tampered transform pass single-node verification.
     if parents:
         t = m.get("transform", {}) if isinstance(m, dict) else {}
         tdigest = t.get("digest") if isinstance(t, dict) else None
         if isinstance(tdigest, str) and HEX64.match(tdigest):
-            if not cas.object_path(tdigest).exists():
+            tobj = cas.object_path(tdigest)
+            if not tobj.exists():
                 errors.append(
                     f"derived node transform not in CAS: {tdigest} "
                     "(ingest with --transform-file)"
                 )
+            else:
+                tactual = sha256_file(tobj)
+                if tactual != tdigest:
+                    errors.append(
+                        f"transform object corrupt: expected {tdigest}, "
+                        f"got {tactual}"
+                    )
 
     # 6) retraction status (ADR-013): a warning by default, an error under
     # --deny-retracted. Retraction is epistemic status, not deletion.
