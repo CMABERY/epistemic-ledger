@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Local hardening: reject modify/delete/rename/copy under protected ledger
+# prefixes (objects, nodes, deltas, retractions). CI is necessary but not
+# sufficient; this blocks self-inflicted wounds before they become commits.
+python3 tools/check_append_only.py --cached
+
+# Frozen surface + Sprint-1 fencepost: run when relevant files are staged.
+CHANGED="$(git diff --cached --name-only)"
+if echo "$CHANGED" | grep -Eq '^(schemas/|fixtures/|src/nre/|ledger/schema/|pyproject\.toml$|requirements\.lock$)'; then
+  python3 tools/check_frozen.py
+  if command -v nre-verify-fixtures >/dev/null 2>&1; then
+    nre-verify-fixtures --all
+  else
+    echo "error: nre-verify-fixtures not on PATH (activate .venv / pip install -e .)" >&2
+    exit 1
+  fi
+fi
