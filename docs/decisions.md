@@ -1,0 +1,30 @@
+# Decision log
+
+Ratified decisions governing this reconstruction. Ratification source for
+ADR-001…ADR-018: user approval of the reconstruction plan, 2026-08-13.
+Entries are append-only; supersede with a new entry, never edit history.
+
+Original design material: `github.com/CMABERY/4GARTHA` (frozen bytes) and the
+pre-repo design threads (narrative). Where they conflict, **LAW-0001 applies:
+tests/bytes are normative, narrative is not.**
+
+| ID | Decision | Rationale |
+|----|----------|-----------|
+| ADR-001 | Ledger store lives in the git worktree, not in git objects or an external store. | Git's diff machinery is the enforcement surface for the append-only invariant (`git diff --name-status` drives `check_append_only`); sha256 identity is computed independently and survives git. |
+| ADR-002 | Regime B: CI never executes transforms. Replay is operator-only, run in an explicitly trusted environment. | Governance correctness must not depend on safely executing arbitrary code in CI. The original CI violated its own decision (ran `replay_new_nodes.py`); that step is dropped. |
+| ADR-003 | Node id = sha256 of raw artifact bytes, bare lowercase hex. `ledger/schema/node.schema.json` reused verbatim, pinned `900af7e40b84dcaf845630bbf164fc386feeb75bbeb7b27d9cc4e2cd1a77c266`. | Frozen contract of the original kernel. |
+| ADR-004 | Weak transform fallback (digest of transform *name* string) removed. Derived nodes (parents nonempty) require a CAS-resident transform, enforced at ingest and verify. | The name-hash mode produced non-replayable derived nodes — a hole in the derivation contract. |
+| ADR-005 | Root/admission nodes (parents = []) carry sentinel `transform.digest` = sha256 of empty bytes (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`) with `params: {}`; replay passes trivially. | The pinned node schema requires `transform` on every node; roots have nothing to replay. |
+| ADR-006 | NRE envelope exit codes {0, 10, 11, 12} are frozen by fixture bytes (`schema_error_cap_missing_kind` pins 12). Design-note enum (30 SCHEMA_VALIDATION_FAILED) rejected. Process-level codes: 0 OK, 2 usage, 20 FIXTURE_MISMATCH, 40 INTERNAL_ERROR. Envelope codes are never surfaced as process codes. | LAW-0001: frozen `expected.json` bytes outrank narrative drafts. 40 ratified as replacement for the shipped non-frozen 99. |
+| ADR-007 | P2 id-enumeration (when implemented): empty list → empty payload → `sha256:e3b0c442…`; nonempty → `"\n".join(ids) + "\n"`. **Ratified, unimplemented** — extension deferred with P1x/P3x. | Resolves the design-note conflict (spec text said always-trailing-newline; the design-note vector pinned sha256("")). No frozen vector exists at the origin; recorded now so a future implementation doesn't relitigate. |
+| ADR-008 | `normalize_string` stays NFC-only (frozen). Design-note trim/collapse-whitespace/newline rules are not merged into the frozen primitive. | Shipped `canon/strings.py` and its frozen vectors are NFC-only; the richer rules never shipped. |
+| ADR-009 | FileRef stays `{path, raw_sha256}`. Notion external/file_upload/hosted mapping excluded. | Shipped fencepost declares "no Notion I/O"; the mapping exists only in design notes. |
+| ADR-010 | `canon_json_bytes` gains `allow_nan=False`. | Strictness fix in a corner no frozen vector observes; NaN in canonical material would be a silent nondeterminism hazard. |
+| ADR-011 | NRE verifier invoked via console-script entry point (`nre-verify-fixtures` from pyproject), not a PATH-prepended `cli/` script. Frozen = vectors + exit codes + semantics, not file paths. Original `canon/ids.py` renamed `nre/canon/hashing.py` (it is canonical-JSON hashing, not id normalization). | Kills the `PATH="$(pwd)/cli:$PATH"` hack; names follow function. |
+| ADR-012 | Protected add-only prefixes: `ledger/objects/`, `ledger/nodes/`, `ledger/deltas/` (reserved for RCWP), `ledger/retractions/`. `ledger/refs/` mutable by design. | Deltas path reserved so the invariant predates the tooling; retractions are append-only records. |
+| ADR-013 | Retraction is an append, never a deletion: `ledger/retractions/<node_id>.json` marks a node retracted (reason, optional successor). Supersession = ref move. A break-glass history-rewrite ceremony for secret/poison ingestion is documented in `docs/RETRACTION.md` **before** it is ever needed. | Add-only forever collides with mistakes and secrets; the exception path must be governed, not improvised. |
+| ADR-014 | Entire frozen surface byte-pinned via `fixtures/FROZEN_SHA256SUMS`, checked in CI and pre-commit. | Changing frozen bytes must require touching the sums file — loud and reviewable. |
+| ADR-015 | Original ingest session lock (`locks.py`, env-gated) dropped; manifest immutability via atomic `open(path, "x")`. | The lock arrived via a half-applied patch that corrupted `cli.py`; atomic create closes the same race with less machinery. Revisit if concurrent ingest becomes a real workflow. |
+| ADR-016 | CI checks out with `fetch-depth: 0` and runs an explicit merge-base precheck that fails loudly with remediation text. | The original's `--depth=1` fetch silently broke the append-only diff range ("no merge base"). |
+| ADR-017 | Deferred from this pass: TPM root-entropy fixtures (`commit-fixtures/`, `ingest_root_entropy.py`), RCWP delta tooling, P1x/P2x/P3x canon extensions. Seams: ordinary root-node ingest; reserved `ledger/deltas/`. | User-ratified scope: kernel + governance + Sprint-1 gate. |
+| ADR-018 | Strays excluded from reconstruction: `memory_system.py`, `test_memory_system.py`, `0001-ingest-session-lock.patch`, `scripts/insert_fix_tools_imports.py`, `static.yml`/`static1.yml`/`setup-directories.yml`, `.github/agents/`, orphaned `tools/_schema.py`. | Unrelated to the three in-scope subsystems; several reference artifacts that do not exist. |
