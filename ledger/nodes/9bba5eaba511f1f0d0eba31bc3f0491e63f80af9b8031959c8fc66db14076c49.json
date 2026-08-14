@@ -1,0 +1,12 @@
+{
+  "id": "9bba5eaba511f1f0d0eba31bc3f0491e63f80af9b8031959c8fc66db14076c49",
+  "meta": {
+    "note": "v0.1.0 pilot root A (generated, publishable)"
+  },
+  "parents": [],
+  "transform": {
+    "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "name": "admission",
+    "params": {}
+  }
+}
