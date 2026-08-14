@@ -11,12 +11,13 @@ additions:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Set
 
 from ledger.cas import CasPaths, sha256_file
 from ledger.manifest import node_manifest_path, read_node_manifest
+from ledger.retract import is_retracted, read_retraction, validate_retraction
 from ledger.schema import validate_manifest
 
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -26,10 +27,17 @@ HEX64 = re.compile(r"^[0-9a-f]{64}$")
 class VerifyResult:
     ok: bool
     errors: List[str]
+    warnings: List[str] = field(default_factory=list)
 
 
-def verify_node(repo_root: Path, node_id: str, replay: bool = False) -> VerifyResult:
+def verify_node(
+    repo_root: Path,
+    node_id: str,
+    replay: bool = False,
+    deny_retracted: bool = False,
+) -> VerifyResult:
     errors: List[str] = []
+    warnings: List[str] = []
 
     # 1) manifest exists
     mp = node_manifest_path(repo_root, node_id)
@@ -81,7 +89,20 @@ def verify_node(repo_root: Path, node_id: str, replay: bool = False) -> VerifyRe
                     "(ingest with --transform-file)"
                 )
 
-    # 6) optional derivation replay (stronger verification)
+    # 6) retraction status (ADR-013): a warning by default, an error under
+    # --deny-retracted. Retraction is epistemic status, not deletion.
+    if is_retracted(repo_root, node_id):
+        try:
+            reason = read_retraction(repo_root, node_id).get("reason", "unspecified")
+        except Exception:
+            reason = "unreadable retraction record"
+        msg = f"retracted: {reason}"
+        if deny_retracted:
+            errors.append(msg)
+        else:
+            warnings.append(msg)
+
+    # 7) optional derivation replay (stronger verification)
     if replay and len(errors) == 0:
         from ledger.replay import replay_node
 
@@ -89,13 +110,19 @@ def verify_node(repo_root: Path, node_id: str, replay: bool = False) -> VerifyRe
         if not rr.ok:
             errors.extend([f"replay: {e}" for e in rr.errors])
 
-    return VerifyResult(ok=(len(errors) == 0), errors=errors)
+    return VerifyResult(ok=(len(errors) == 0), errors=errors, warnings=warnings)
 
 
-def verify_reachable(repo_root: Path, root_id: str, replay: bool = False) -> VerifyResult:
+def verify_reachable(
+    repo_root: Path,
+    root_id: str,
+    replay: bool = False,
+    deny_retracted: bool = False,
+) -> VerifyResult:
     """DFS with memoization; validates all reachable nodes. Cycle-safe."""
 
     errors: List[str] = []
+    warnings: List[str] = []
     seen: Set[str] = set()
     stack: List[str] = [root_id]
 
@@ -105,9 +132,10 @@ def verify_reachable(repo_root: Path, root_id: str, replay: bool = False) -> Ver
             continue
         seen.add(nid)
 
-        r = verify_node(repo_root, nid, replay=replay)
+        r = verify_node(repo_root, nid, replay=replay, deny_retracted=deny_retracted)
         if not r.ok:
             errors.extend([f"{nid}: {e}" for e in r.errors])
+        warnings.extend([f"{nid}: {w}" for w in r.warnings])
 
         try:
             m = read_node_manifest(repo_root, nid)
@@ -119,7 +147,7 @@ def verify_reachable(repo_root: Path, root_id: str, replay: bool = False) -> Ver
         except Exception as e:
             errors.append(f"{nid}: failed reading manifest: {e}")
 
-    return VerifyResult(ok=(len(errors) == 0), errors=errors)
+    return VerifyResult(ok=(len(errors) == 0), errors=errors, warnings=warnings)
 
 
 def fsck(repo_root: Path, replay: bool = False) -> VerifyResult:
@@ -172,5 +200,43 @@ def fsck(repo_root: Path, replay: bool = False) -> VerifyResult:
                 continue
             if not node_manifest_path(repo_root, value).is_file():
                 errors.append(f"ref {rf.name}: dangling (no manifest for {value})")
+
+    # Retractions (ADR-013): structural audit; being retracted is not an error.
+    retr_dir = repo_root / "ledger" / "retractions"
+    if retr_dir.is_dir():
+        import json as _json
+
+        for rf in sorted(retr_dir.iterdir()):
+            if rf.name == ".keep" or not rf.is_file():
+                continue
+            if not rf.name.endswith(".json") or not HEX64.match(rf.name[:-5]):
+                errors.append(f"stray file in retractions/: {rf.name}")
+                continue
+            try:
+                rec = _json.loads(rf.read_text(encoding="utf-8"))
+            except Exception as e:
+                errors.append(f"retraction {rf.name}: unreadable: {e}")
+                continue
+            errors.extend(
+                f"retraction {rf.name}: {e}" for e in validate_retraction(repo_root, rec)
+            )
+            if isinstance(rec, dict):
+                if rec.get("retracts") != rf.name[:-5]:
+                    errors.append(
+                        f"retraction {rf.name}: retracts field mismatch: "
+                        f"{rec.get('retracts')!r}"
+                    )
+                target = rec.get("retracts")
+                if isinstance(target, str) and HEX64.match(target):
+                    if not node_manifest_path(repo_root, target).is_file():
+                        errors.append(
+                            f"retraction {rf.name}: no manifest for retracted node"
+                        )
+                succ = rec.get("superseded_by")
+                if isinstance(succ, str) and HEX64.match(succ):
+                    if not node_manifest_path(repo_root, succ).is_file():
+                        errors.append(
+                            f"retraction {rf.name}: dangling successor {succ}"
+                        )
 
     return VerifyResult(ok=(len(errors) == 0), errors=errors)

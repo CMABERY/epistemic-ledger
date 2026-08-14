@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "created": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}",
+      "type": "string"
+    },
+    "reason": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "retracts": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "superseded_by": {
+      "oneOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "retracts",
+    "reason",
+    "superseded_by",
+    "created"
+  ],
+  "title": "Epistemic Ledger Retraction Record",
+  "type": "object"
+}

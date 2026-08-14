@@ -40,6 +40,11 @@ def _print_errors(errors: list[str]) -> None:
         print(e)
 
 
+def _print_warnings(warnings: list[str]) -> None:
+    for w in warnings:
+        print(f"warning: {w}")
+
+
 def cmd_hash(args: argparse.Namespace) -> int:
     p = Path(args.path)
     if not p.exists():
@@ -114,7 +119,10 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     repo_root = repo_root_from_cwd()
     node_id = resolve(repo_root, args.id)
-    r = verify_node(repo_root, node_id, replay=args.replay)
+    r = verify_node(
+        repo_root, node_id, replay=args.replay, deny_retracted=args.deny_retracted
+    )
+    _print_warnings(r.warnings)
     if r.ok:
         print("OK")
         return 0
@@ -125,12 +133,31 @@ def cmd_verify(args: argparse.Namespace) -> int:
 def cmd_verify_reachable(args: argparse.Namespace) -> int:
     repo_root = repo_root_from_cwd()
     node_id = resolve(repo_root, args.id)
-    r = verify_reachable(repo_root, node_id, replay=args.replay)
+    r = verify_reachable(
+        repo_root, node_id, replay=args.replay, deny_retracted=args.deny_retracted
+    )
+    _print_warnings(r.warnings)
     if r.ok:
         print("OK")
         return 0
     _print_errors(r.errors)
     return 2
+
+
+def cmd_retract(args: argparse.Namespace) -> int:
+    repo_root = repo_root_from_cwd()
+    from ledger.retract import write_retraction
+
+    node_id = resolve(repo_root, args.id)
+    succ = None
+    if args.superseded_by:
+        succ = resolve(repo_root, args.superseded_by)
+    try:
+        p = write_retraction(repo_root, node_id, args.reason, superseded_by=succ)
+    except (FileNotFoundError, FileExistsError, ValueError) as e:
+        raise SystemExit(str(e))
+    print(p)
+    return 0
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
@@ -227,6 +254,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also replay derivation (requires transform in CAS).",
     )
+    p_ver.add_argument(
+        "--deny-retracted",
+        action="store_true",
+        help="Treat a retracted node as a verification failure (default: warning).",
+    )
     p_ver.set_defaults(fn=cmd_verify)
 
     p_vr = sub.add_parser(
@@ -243,6 +275,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--replay",
         action="store_true",
         help="Also replay derivations for reachable nodes.",
+    )
+    p_vr.add_argument(
+        "--deny-retracted",
+        action="store_true",
+        help="Treat retracted nodes as verification failures (default: warning).",
     )
     p_vr.set_defaults(fn=cmd_verify_reachable)
 
@@ -269,6 +306,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also replay every derived node (operator-only; slow).",
     )
     p_fsck.set_defaults(fn=cmd_fsck)
+
+    p_ret = sub.add_parser(
+        "retract",
+        help="Append a retraction record for a node (never deletes; ADR-013).",
+    )
+    p_ret.add_argument("id", help="Node id or ref name to retract.")
+    p_ret.add_argument("--reason", required=True, help="Why the node is retracted.")
+    p_ret.add_argument(
+        "--superseded-by",
+        help="Node id or ref name of the successor (optional).",
+    )
+    p_ret.set_defaults(fn=cmd_retract)
 
     p_rs = sub.add_parser("refs", help="Manage mutable convenience refs.")
     rs = p_rs.add_subparsers(dest="refs_cmd", required=True)

@@ -17,10 +17,10 @@ def repo_root() -> Path:
 def ledger_repo(tmp_path: Path) -> Path:
     """A scratch ledger repo with the pinned node schema installed."""
 
-    for d in ("objects", "nodes", "refs"):
+    for d in ("objects", "nodes", "refs", "retractions"):
         (tmp_path / "ledger" / d).mkdir(parents=True)
     schema_dir = tmp_path / "ledger" / "schema"
     schema_dir.mkdir()
-    for f in ("node.schema.json", "NODE_SCHEMA_SHA256"):
+    for f in ("node.schema.json", "NODE_SCHEMA_SHA256", "retraction.schema.json"):
         shutil.copy(REPO_ROOT / "ledger" / "schema" / f, schema_dir / f)
     return tmp_path
