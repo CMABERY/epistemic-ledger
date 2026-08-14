@@ -1,0 +1,6 @@
+{
+  "created": "2026-08-14T07:29:37Z",
+  "reason": "Phase-4 pilot: deliberate retraction demonstration (ADR-013); artifact remains publishable",
+  "retracts": "f2825bada2234f04846ccfc84ba44dbd5d42787983caf8c42d1e3e6b4e080b7a",
+  "superseded_by": null
+}
