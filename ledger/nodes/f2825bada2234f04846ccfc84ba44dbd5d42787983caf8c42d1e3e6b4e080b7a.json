@@ -1,0 +1,12 @@
+{
+  "id": "f2825bada2234f04846ccfc84ba44dbd5d42787983caf8c42d1e3e6b4e080b7a",
+  "meta": {
+    "note": "v0.1.0 pilot retraction target (generated, publishable)"
+  },
+  "parents": [],
+  "transform": {
+    "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "name": "admission",
+    "params": {}
+  }
+}

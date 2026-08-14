@@ -1,0 +1,3 @@
+epistemic-ledger v0.1.0 operational pilot — retraction target
+Generated test artifact. Exists to demonstrate ADR-013 retraction:
+retraction is an epistemic-status append, not a deletion.

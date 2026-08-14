@@ -1,0 +1,17 @@
+{
+  "id": "f2e8db02eab5767dd7a215fc34c05a159420ef4cdbf5769f1e89ff90308e7bdb",
+  "meta": {
+    "note": "v0.1.0 pilot derived child = A || B || suffix"
+  },
+  "parents": [
+    "9bba5eaba511f1f0d0eba31bc3f0491e63f80af9b8031959c8fc66db14076c49",
+    "a9607c61ea1d3c79c1b7d04f89c47b8150e7af58886d4b5490afcc919ec9f07a"
+  ],
+  "transform": {
+    "digest": "93c142d3023e4af7e587da7071db670c415137a5f6e672bc7c31f669abe70076",
+    "name": "concat_parents",
+    "params": {
+      "suffix": "\n-- derived by concat_parents v0 (epistemic-ledger v0.1.0 pilot)\n"
+    }
+  }
+}
